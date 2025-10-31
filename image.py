@@ -13,6 +13,7 @@ def crop_image(image_path, output_path="./cropped", reveal_ratio=0.25):
 
         cropped = img.crop((x_start, y_start, x_start + crop_width, y_start + crop_height))
         ext = image_path.split(".")[-1]
-        cropped.save(f"{output_path}.{ext}")
+        output_path = f"{output_path}.{ext}"
+        cropped.save(output_path)
 
     return output_path

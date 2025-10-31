@@ -5,6 +5,8 @@ __MACOSX/
 .LSOverride
 ._*
 
+.env
+
 # images
 *.png
 *.jpg

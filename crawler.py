@@ -5,7 +5,8 @@ import re
 import requests
 from datetime import datetime
 
-LAST_FM_API_KEY = os.environ['LAST_FM_API_KEY']
+LAST_FM_API_KEY = os.getenv("LAST_FM_API_KEY")
+
 
 def _get_random_page_index(total_pages, lam=0.3):
     # Lower pages are more likely: p(page) ∝ e^{-λ*(page-1)}, λ controls bias
@@ -22,7 +23,7 @@ def _fix_lastfm_image_url(url: str):
     return re.sub(r'/(\d+s?|\d+x\d+)/', '/', url)
 
 
-def _download_image(url, out_path="./img"):
+def download_image(url, out_path="./img"):
     resp = requests.get(url)
     resp.raise_for_status()
     ext = resp.headers.get("Content-Type", "").lower().split("/")[-1]
@@ -71,12 +72,12 @@ def get_random_album_cover(year=None):
                 cover_url = _fix_lastfm_image_url(url)
                 break
 
-    out_path = _download_image(cover_url)
+    out_path = download_image(cover_url)
 
     return {
         "year": year,
         "artist": artist,
         "album": title,
-        "cover_url": cover_url,
+        "url": cover_url,
         "downloaded_path": out_path
     }
