@@ -28,9 +28,6 @@ if __name__ == "__main__":
     if not saved:
         album = get_random_album_cover()
 
-        print(f"{album['artist']} — {album['album']} ({album['year']})")
-        print(f"Cover: {album['url']}")
-
         cropped_image = crop_image(album["downloaded_path"])
 
         tweet_id = twitter_client.post(cropped_image, "Guess the album 🎵")
@@ -45,6 +42,7 @@ if __name__ == "__main__":
         twitter_client.delete(tweet_id)
 
         img_path = download_image(album["url"])
-        twitter_client.post(img_path)
+        text = f"{album['artist']} — {album['album']} ({album['year']})"
+        twitter_client.post(img_path, text)
 
         r.delete(redis_key)
