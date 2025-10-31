@@ -3,9 +3,12 @@
 __MACOSX/
 .AppleDouble
 .LSOverride
-
-# Thumbnails
 ._*
+
+# images
+*.png
+*.jpg
+*.jpeg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
