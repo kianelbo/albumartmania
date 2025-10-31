@@ -9,6 +9,7 @@ from twitter import TwitterClient
 
 REDIS_URL = os.getenv("REDIS_URL")
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+redis_key = "last_album"
 
 
 if __name__ == "__main__":
@@ -22,7 +23,7 @@ if __name__ == "__main__":
 
     twitter_client = TwitterClient()
 
-    saved = r.get("last_album")
+    saved = r.get(redis_key)
 
     if not saved:
         album = get_random_album_cover()
@@ -35,7 +36,7 @@ if __name__ == "__main__":
         tweet_id = twitter_client.post(cropped_image, "Guess the album 🎵")
         album["tweet_id"] = tweet_id
 
-        r.set("last_album", json.dumps(album))
+        r.set(redis_key, json.dumps(album))
 
     else:
         album = json.loads(saved)
@@ -46,4 +47,4 @@ if __name__ == "__main__":
         img_path = download_image(album["url"])
         twitter_client.post(img_path)
 
-        r.delete("last_album")
+        r.delete(redis_key)
