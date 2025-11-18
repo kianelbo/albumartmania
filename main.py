@@ -26,6 +26,8 @@ if __name__ == "__main__":
     saved = r.get(redis_key)
 
     if not saved:
+        print("Fetching and posting the teaser...")
+
         album = get_random_album_cover()
 
         cropped_image = crop_image(album["downloaded_path"])
@@ -36,6 +38,8 @@ if __name__ == "__main__":
         r.set(redis_key, json.dumps(album))
 
     else:
+        print("Fetching and posting the full image...")
+
         album = json.loads(saved)
         tweet_id = album["tweet_id"]
 
