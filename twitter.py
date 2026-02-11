@@ -1,5 +1,8 @@
 import os
+
 import tweepy
+
+from image import resize_if_needed
 
 
 class TwitterClient:
@@ -18,7 +21,12 @@ class TwitterClient:
         )
 
     def post(self, file_path, text=""):
-        media = self.api_v1.media_upload(file_path)
+        upload_path = resize_if_needed(file_path)
+        try:
+            media = self.api_v1.media_upload(upload_path)
+        finally:
+            if upload_path != file_path:
+                os.unlink(upload_path)
         tweet = self.client_v2.create_tweet(text=text, media_ids=[media.media_id_string])
         return tweet.data["id"]
 
