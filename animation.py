@@ -101,6 +101,7 @@ def render_animation(
     *,
     image_data: bytes | None = None,
     frame_transform: Callable[[np.ndarray], np.ndarray] | None = None,
+    frame_time_transform: Callable[[np.ndarray, float], np.ndarray] | None = None,
     final_frame_transform: Callable[[np.ndarray], np.ndarray] | None = None,
 ) -> Path:
     input_is_in_memory = image_data is not None
@@ -178,9 +179,21 @@ def render_animation(
             frame = frame_transform(frame)
         if is_final_frame and final_frame_transform is not None:
             frame = final_frame_transform(frame)
-        for _ in range(count):
-            writer.append_data(frame)
-            frames_written += 1
+
+        # the timer
+        remaining = count
+        while remaining:
+            if frame_time_transform is None:
+                segment_count = remaining
+                output_frame = frame
+            else:
+                frames_to_second_boundary = args.fps - frames_written % args.fps
+                segment_count = min(remaining, frames_to_second_boundary)
+                output_frame = frame_time_transform(frame, frames_written / args.fps)
+            for _ in range(segment_count):
+                writer.append_data(output_frame)
+            frames_written += segment_count
+            remaining -= segment_count
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg_params = [

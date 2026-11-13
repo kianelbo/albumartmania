@@ -26,10 +26,10 @@ DURATION = 60
 SIZE = 1080
 VIDEO_HEIGHT = 1920
 CAPTION = "How soon can you guess the album?"
+font_path = Path(__file__).resolve().parent / "assets" / "OLDSH___.ttf"
 
 
 def render_text_panel(text: str, *, wrap_width: int | None = None) -> np.ndarray:
-    font_path = Path(__file__).resolve().parent / "assets" / "OLDSH___.ttf"
     if wrap_width is not None:
         text = textwrap.fill(text, width=wrap_width)
     lines = text.splitlines()
@@ -95,6 +95,28 @@ def create_credit_frame_transform(credit: str) -> Callable[[np.ndarray], np.ndar
     return compose
 
 
+def create_timer_frame_transform() -> Callable[[np.ndarray, float], np.ndarray]:
+    font = ImageFont.truetype(str(font_path), size=84)
+
+    def compose(frame: np.ndarray, elapsed_seconds: float) -> np.ndarray:
+        if elapsed_seconds >= DURATION - 2:
+            return frame
+
+        panel = Image.new("RGB", (SIZE, 420), "black")
+        ImageDraw.Draw(panel).text(
+            (SIZE // 2, 210),
+            str(int(elapsed_seconds) + 1),
+            font=font,
+            fill=(72, 72, 72),
+            anchor="mm",
+        )
+        composed = frame.copy()
+        composed[1500:] = np.asarray(panel)
+        return composed
+
+    return compose
+
+
 def create_album_video(
     image_data: bytes,
     audio_data: bytes,
@@ -127,6 +149,7 @@ def create_album_video(
             ),
             image_data=image_data,
             frame_transform=create_caption_frame_transform(),
+            frame_time_transform=create_timer_frame_transform(),
             final_frame_transform=create_credit_frame_transform(credit),
         )
 
