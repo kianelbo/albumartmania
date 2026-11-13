@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a 60-second vertical album-reveal video with evolving audio effects.
+"""Create a 60-second vertical album-reveal video with PaulStretch audio.
 
 Example:
     python video_gen.py cover.jpg song.mp3 --credit "Artist, year" "Title
@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from animation import render_animation
-from audio import process_audio
+from paul import paulstretch_mp3
 
 FPS = 30
 DURATION = 60
@@ -130,9 +130,12 @@ def create_album_video(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    processed_audio = process_audio(audio_data, duration=DURATION)
-
     with tempfile.TemporaryDirectory() as temporary_directory:
+        audio_input_path = Path(temporary_directory) / "input.mp3"
+        processed_audio_path = Path(temporary_directory) / "stretched.mp3"
+        audio_input_path.write_bytes(audio_data)
+        paulstretch_mp3(audio_input_path, processed_audio_path, factor=2.0)
+
         square_video = Path(temporary_directory) / "reveal.mp4"
         render_animation(
             argparse.Namespace(
@@ -162,10 +165,8 @@ def create_album_video(
                 "-y",
                 "-i",
                 str(square_video),
-                "-f",
-                "mp3",
                 "-i",
-                "pipe:0",
+                str(processed_audio_path),
                 "-map",
                 "0:v:0",
                 "-map",
@@ -182,7 +183,6 @@ def create_album_video(
                 "+faststart",
                 str(output_path),
             ],
-            input=processed_audio,
             check=True,
         )
 
