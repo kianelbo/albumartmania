@@ -1,4 +1,7 @@
 pillow==12.2.0
+numpy==2.2.6
+imageio==2.38.1
+imageio-ffmpeg==0.8.1
 redis==6.4.0
 requests==2.33.0
 tweepy==4.16.0
