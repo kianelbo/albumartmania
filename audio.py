@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Process an MP3, optionally reversing, muffling, and/or slowing it.
-
-Requires FFmpeg to be installed and available on PATH.
-
-Example:
-    python audio.py song.mp3
-    python audio.py song.mp3 --reverse --muffle --half-speed
-"""
+"""Create a 60-second reverse-to-forward guitar-fuzz and tremolo effect."""
 
 from __future__ import annotations
 
@@ -15,129 +8,65 @@ import shutil
 import subprocess
 from pathlib import Path
 
-OUTPUT_PATH = Path("muffled.mp3")
+OUTPUT_PATH = Path("processed.mp3")
+DEFAULT_DURATION = 60.0
 
 
-def _measure_duration(audio_data: bytes) -> float:
+def _effect_filter_graph(duration: float) -> str:
+    segment_duration = duration / 2
+    effect_fade_duration = duration / 3
+    fuzz = (
+        "volume=12,asoftclip=type=hard:threshold=0.2:oversample=8,"
+        "highpass=f=100,lowpass=f=5000"
+    )
+    effect_progress = (
+        f"min(max(t/{effect_fade_duration:.9f},0),1)"
+    )
+    wet_volume = f"1-pow({effect_progress},2)"
+    dry_volume = f"pow({effect_progress},2)"
+    overall_progress = f"min(max(t/{duration:.9f},0),1)"
+    overall_volume = f"0.01+0.99*pow({overall_progress},2)"
+    segment = f"{segment_duration:.9f}"
+
+    return ";".join(
+        [
+            "[0:a]asplit=2[reverse_input][forward_input]",
+            f"[reverse_input]atrim=duration={segment},asetpts=PTS-STARTPTS,"
+            "areverse,apad=whole_dur="
+            f"{segment},atrim=duration={segment},{fuzz}[reverse_effect]",
+            f"[forward_input]atrim=duration={segment},asetpts=PTS-STARTPTS,"
+            f"apad=whole_dur={segment},atrim=duration={segment},"
+            "asplit=2[wet_input][dry_input]",
+            f"[wet_input]{fuzz},tremolo=f=8:d=0.98,"
+            f"volume='{wet_volume}':eval=frame[wet]",
+            f"[dry_input]volume='{dry_volume}':eval=frame[dry]",
+            "[wet][dry]amix=inputs=2:duration=first:dropout_transition=0:"
+            "normalize=0[forward_effect]",
+            "[reverse_effect][forward_effect]concat=n=2:v=0:a=1[segments]",
+            f"[segments]volume='{overall_volume}':eval=frame,"
+            f"apad=whole_dur={duration},atrim=duration={duration}[output]",
+        ]
+    )
+
+
+def process_audio(audio_data: bytes, *, duration: float = DEFAULT_DURATION) -> bytes:
+    if shutil.which("ffmpeg") is None:
+        raise FileNotFoundError("FFmpeg is required; install it and make sure it is on PATH")
+    if duration <= 0:
+        raise ValueError("Audio duration must be positive")
+
     result = subprocess.run(
         [
             "ffmpeg",
-            "-v",
+            "-hide_banner",
+            "-loglevel",
             "error",
             "-i",
             "pipe:0",
-            "-vn",
-            "-ac",
-            "1",
-            "-ar",
-            "8000",
-            "-f",
-            "s16le",
-            "pipe:1",
-        ],
-        input=audio_data,
-        stdout=subprocess.PIPE,
-        check=True,
-    )
-    duration = len(result.stdout) / (8000 * 2)
-    if duration <= 0:
-        raise ValueError("Audio duration must be positive")
-    return duration
-
-
-def _muffle_filter_graph(
-    processing_filters: list[str],
-    ramp_duration: float,
-    output_duration: float | None,
-) -> str:
-    if ramp_duration <= 1:
-        wet_volume, dry_volume = "0", "1"
-    else:
-        progress = f"min(max(t/{ramp_duration - 1:.9f},0),1)"
-        dry_volume = f"pow({progress},2)"
-        wet_volume = f"1-{dry_volume}"
-
-    graph = []
-    prefix = ",".join(processing_filters)
-    if prefix:
-        graph.append(f"[0:a]{prefix}[source]")
-        source = "[source]"
-    else:
-        source = "[0:a]"
-    graph.extend(
-        [
-            f"{source}asplit=2[wet_source][dry_source]",
-            "[wet_source]highpass=f=80,lowpass=f=350,"
-            f"volume='{wet_volume}':eval=frame[wet]",
-            f"[dry_source]volume='{dry_volume}':eval=frame[dry]",
-            "[wet][dry]amix=inputs=2:duration=longest:dropout_transition=0:"
-            "normalize=0[mixed]",
-        ]
-    )
-    if output_duration is not None:
-        graph.append(
-            f"[mixed]apad=whole_dur={output_duration},"
-            f"atrim=duration={output_duration}[output]"
-        )
-    else:
-        graph.append("[mixed]anull[output]")
-    return ";".join(graph)
-
-
-def process_audio(
-    audio_data: bytes,
-    *,
-    muffle: bool = False,
-    half_speed: bool = False,
-    reverse: bool = False,
-    duration: float | None = None,
-) -> bytes:
-    if shutil.which("ffmpeg") is None:
-        raise FileNotFoundError("FFmpeg is required; install it and make sure it is on PATH")
-    if duration is not None and duration <= 0:
-        raise ValueError("Audio duration must be positive")
-
-    filters = []
-    if half_speed:
-        filters.append("atempo=0.5")
-    if reverse:
-        filters.append("areverse")
-
-    use_filter_graph = muffle
-    if muffle:
-        processed_duration = _measure_duration(audio_data) * (
-            2 if half_speed else 1
-        )
-        if duration is not None:
-            processed_duration = min(processed_duration, duration)
-    if duration is not None:
-        if not use_filter_graph:
-            filters.extend(
-                [f"apad=whole_dur={duration}", f"atrim=duration={duration}"]
-            )
-
-    command = [
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-i",
-        "pipe:0",
-        "-vn",
-    ]
-    if use_filter_graph:
-        command.extend(
-            [
-                "-filter_complex",
-                _muffle_filter_graph(filters, processed_duration, duration),
-                "-map",
-                "[output]",
-            ]
-        )
-    elif filters:
-        command.extend(["-af", ",".join(filters)])
-    command.extend(
-        [
+            "-filter_complex",
+            _effect_filter_graph(duration),
+            "-map",
+            "[output]",
             "-codec:a",
             "libmp3lame",
             "-q:a",
@@ -145,10 +74,7 @@ def process_audio(
             "-f",
             "mp3",
             "pipe:1",
-        ]
-    )
-    result = subprocess.run(
-        command,
+        ],
         input=audio_data,
         stdout=subprocess.PIPE,
         check=True,
@@ -158,22 +84,7 @@ def process_audio(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", type=Path, help="MP3 file to process")
-    parser.add_argument(
-        "--muffle",
-        action="store_true",
-        help="start heavily muffled and fade to normal over the track",
-    )
-    parser.add_argument(
-        "--half-speed",
-        action="store_true",
-        help="slow playback to 0.5x while preserving pitch",
-    )
-    parser.add_argument(
-        "--reverse",
-        action="store_true",
-        help="reverse playback",
-    )
+    parser.add_argument("input", type=Path, help="Song MP3")
     args = parser.parse_args()
 
     if not args.input.is_file():
@@ -188,12 +99,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    output = process_audio(
-        args.input.read_bytes(),
-        muffle=args.muffle,
-        half_speed=args.half_speed,
-        reverse=args.reverse,
-    )
+    output = process_audio(args.input.read_bytes())
     OUTPUT_PATH.write_bytes(output)
     print(f"Created {OUTPUT_PATH}")
 

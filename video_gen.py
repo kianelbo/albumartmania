@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a 60-second vertical album-reveal video with reversed audio."""
+"""Create a 60-second vertical album-reveal video with evolving audio effects."""
 
 from __future__ import annotations
 
@@ -55,13 +55,7 @@ def create_album_video(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    processed_audio = process_audio(
-        audio_data,
-        muffle=False,
-        half_speed=True,
-        reverse=True,
-        duration=DURATION,
-    )
+    processed_audio = process_audio(audio_data, duration=DURATION)
 
     with tempfile.TemporaryDirectory() as temporary_directory:
         square_video = Path(temporary_directory) / "reveal.mp4"
