@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Create a 60-second vertical album-reveal video with evolving audio effects."""
+"""Create a 60-second vertical album-reveal video with evolving audio effects.
+
+Example:
+    python video_gen.py cover.jpg song.mp3 --credit "Artist, year" "Title
+"""
 
 from __future__ import annotations
 
@@ -24,10 +28,25 @@ VIDEO_HEIGHT = 1920
 CAPTION = "How soon can you guess the album?"
 
 
-def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
+def render_text_panel(text: str, *, wrap_width: int | None = None) -> np.ndarray:
     font_path = Path(__file__).resolve().parent / "assets" / "OLDSH___.ttf"
-    font = ImageFont.truetype(str(font_path), size=90)
-    text = textwrap.fill(CAPTION, width=18)
+    if wrap_width is not None:
+        text = textwrap.fill(text, width=wrap_width)
+    lines = text.splitlines()
+    stroke_width = 2
+    font = None
+    for size in range(90, 8, -2):
+        candidate = ImageFont.truetype(str(font_path), size=size)
+        line_widths = [
+            candidate.getlength(line) + 2 * stroke_width
+            for line in lines
+        ]
+        if max(line_widths) <= SIZE - 100:
+            font = candidate
+            break
+    if font is None:
+        raise ValueError("Text is too long to fit in the banner")
+
     overlay = Image.new("RGBA", (SIZE, 420), (0, 0, 0, 0))
     ImageDraw.Draw(overlay).multiline_text(
         (SIZE // 2, 210),
@@ -37,7 +56,7 @@ def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
         anchor="mm",
         align="center",
         spacing=8,
-        stroke_width=2,
+        stroke_width=stroke_width,
         stroke_fill="white",
     )
     italic = overlay.transform(
@@ -48,7 +67,11 @@ def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
         fillcolor=(0, 0, 0, 0),
     )
     banner = Image.alpha_composite(Image.new("RGBA", overlay.size, "black"), italic)
-    header = np.asarray(banner.convert("RGB"))
+    return np.asarray(banner.convert("RGB"))
+
+
+def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
+    header = render_text_panel(CAPTION, wrap_width=18)
 
     def compose(frame: np.ndarray) -> np.ndarray:
         composed = np.zeros((VIDEO_HEIGHT, SIZE, 3), dtype=np.uint8)
@@ -59,13 +82,29 @@ def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
     return compose
 
 
+def create_credit_frame_transform(credit: str) -> Callable[[np.ndarray], np.ndarray]:
+    if len(credit.splitlines()) != 2:
+        raise ValueError("Credit must contain exactly two lines")
+    credit_panel = render_text_panel(credit)
+
+    def compose(frame: np.ndarray) -> np.ndarray:
+        composed = frame.copy()
+        composed[1500:] = credit_panel
+        return composed
+
+    return compose
+
+
 def create_album_video(
     image_data: bytes,
     audio_data: bytes,
     output_path: Path,
     *,
+    credit: str,
     seed: int | None = None,
 ) -> Path:
+    if len(credit.splitlines()) != 2:
+        raise ValueError("Credit must contain exactly two lines")
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -80,7 +119,7 @@ def create_album_video(
                 fps=FPS,
                 max_frames=FPS * DURATION,
                 start_hold=1.0,
-                end_hold=1.0,
+                end_hold=2.0,
                 seed=seed,
                 crf=18,
                 preset="faster",
@@ -88,6 +127,7 @@ def create_album_video(
             ),
             image_data=image_data,
             frame_transform=create_caption_frame_transform(),
+            final_frame_transform=create_credit_frame_transform(credit),
         )
 
         subprocess.run(
@@ -132,6 +172,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("image", type=Path, help="Album-cover image")
     parser.add_argument("audio", type=Path, help="Song MP3")
     parser.add_argument(
+        "--credit",
+        nargs=2,
+        required=True,
+        metavar=("ARTIST_YEAR", "TITLE"),
+        help="two credit lines shown during the final two seconds",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         type=Path,
@@ -156,6 +203,7 @@ def main() -> int:
             args.image.read_bytes(),
             args.audio.read_bytes(),
             args.output,
+            credit="\n".join(args.credit),
             seed=args.seed,
         )
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:

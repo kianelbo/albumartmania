@@ -101,6 +101,7 @@ def render_animation(
     *,
     image_data: bytes | None = None,
     frame_transform: Callable[[np.ndarray], np.ndarray] | None = None,
+    final_frame_transform: Callable[[np.ndarray], np.ndarray] | None = None,
 ) -> Path:
     input_is_in_memory = image_data is not None
     input_path = Path(args.input)
@@ -166,10 +167,17 @@ def render_animation(
     frames_written = 0
     snapshots_written = 0
 
-    def append(frame: np.ndarray, count: int = 1) -> None:
+    def append(
+        frame: np.ndarray,
+        count: int = 1,
+        *,
+        is_final_frame: bool = False,
+    ) -> None:
         nonlocal frames_written
         if frame_transform is not None:
             frame = frame_transform(frame)
+        if is_final_frame and final_frame_transform is not None:
+            frame = final_frame_transform(frame)
         for _ in range(count):
             writer.append_data(frame)
             frames_written += 1
@@ -234,7 +242,7 @@ def render_animation(
 
         if not np.array_equal(canvas, image):
             raise RuntimeError("Quadtree refinement did not reproduce the resized image")
-        append(image, end_hold_frames)
+        append(image, end_hold_frames, is_final_frame=True)
 
     print("\rProgress: 100%", file=sys.stderr)
     duration = frames_written / args.fps
