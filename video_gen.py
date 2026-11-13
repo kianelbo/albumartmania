@@ -3,6 +3,8 @@
 
 Example:
     python video_gen.py cover.jpg song.mp3 --credit "Artist, year" "Title
+
+A random frame from 17-31 seconds is saved beside the video as *_thumbnail.jpg.
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ REVERSE_DURATION = 2
 FORWARD_DURATION = DURATION - REVERSE_DURATION
 CREDIT_START = FORWARD_DURATION - REVERSE_DURATION
 REVERSE_FRAME_COUNT = FPS * REVERSE_DURATION
+THUMBNAIL_START_SECOND = 17
+THUMBNAIL_END_SECOND = 31
 SIZE = 1080
 VIDEO_HEIGHT = 1920
 CAPTION = "How soon can you guess the album?"
@@ -215,6 +219,43 @@ def create_loop_filter_complex() -> str:
     )
 
 
+def save_random_thumbnail(
+    video_path: Path,
+    *,
+    seed: int | None = None,
+) -> tuple[Path, float]:
+    frame_index = int(
+        np.random.default_rng(seed).integers(
+            THUMBNAIL_START_SECOND * FPS,
+            THUMBNAIL_END_SECOND * FPS + 1,
+        )
+    )
+    timestamp = frame_index / FPS
+    thumbnail_path = video_path.with_name(f"{video_path.stem}_thumbnail.jpg")
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(video_path),
+            "-ss",
+            f"{timestamp:.6f}",
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
+            str(thumbnail_path),
+        ],
+        check=True,
+    )
+    return thumbnail_path, timestamp
+
+
 def create_album_video(
     image_data: bytes,
     audio_data: bytes,
@@ -295,7 +336,10 @@ def create_album_video(
             check=True,
         )
 
+        thumbnail_path, thumbnail_time = save_random_thumbnail(output_path, seed=seed)
+
     print(f"Created {output_path}")
+    print(f"Created thumbnail {thumbnail_path} from {thumbnail_time:.2f}s")
     return output_path
 
 
@@ -320,11 +364,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, help="Random seed for repeatable reveals")
     args = parser.parse_args()
 
+    thumbnail_path = args.output.with_name(f"{args.output.stem}_thumbnail.jpg")
     for input_path in (args.image, args.audio):
         if not input_path.is_file():
             parser.error(f"input file does not exist: {input_path}")
         if input_path.resolve() == args.output.resolve():
             parser.error(f"output must differ from input: {input_path}")
+        if input_path.resolve() == thumbnail_path.resolve():
+            parser.error(f"thumbnail output must differ from input: {input_path}")
     return args
 
 
