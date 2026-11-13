@@ -7,6 +7,7 @@ import argparse
 import subprocess
 import sys
 import tempfile
+import textwrap
 from collections.abc import Callable
 from pathlib import Path
 
@@ -24,17 +25,30 @@ CAPTION = "How soon can you guess the album?"
 
 
 def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
-    top = np.zeros((420, SIZE, 3), dtype=np.uint8)
-    banner = Image.fromarray(top)
-    draw = ImageDraw.Draw(banner)
-    draw.text(
+    font_path = Path(__file__).resolve().parent / "assets" / "OLDSH___.ttf"
+    font = ImageFont.truetype(str(font_path), size=90)
+    text = textwrap.fill(CAPTION, width=18)
+    overlay = Image.new("RGBA", (SIZE, 420), (0, 0, 0, 0))
+    ImageDraw.Draw(overlay).multiline_text(
         (SIZE // 2, 210),
-        CAPTION,
+        text,
+        font=font,
         fill="white",
-        font=ImageFont.load_default(size=48),
         anchor="mm",
+        align="center",
+        spacing=8,
+        stroke_width=2,
+        stroke_fill="white",
     )
-    header = np.asarray(banner)
+    italic = overlay.transform(
+        overlay.size,
+        Image.Transform.AFFINE,
+        (1, 0.12, -50, 0, 1, 0),
+        resample=Image.Resampling.BICUBIC,
+        fillcolor=(0, 0, 0, 0),
+    )
+    banner = Image.alpha_composite(Image.new("RGBA", overlay.size, "black"), italic)
+    header = np.asarray(banner.convert("RGB"))
 
     def compose(frame: np.ndarray) -> np.ndarray:
         composed = np.zeros((VIDEO_HEIGHT, SIZE, 3), dtype=np.uint8)
