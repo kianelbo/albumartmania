@@ -15,6 +15,7 @@ import textwrap
 from collections.abc import Callable
 from pathlib import Path
 
+import imageio.v2 as imageio
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
@@ -23,6 +24,10 @@ from paul import paulstretch_mp3
 
 FPS = 30
 DURATION = 60
+REVERSE_DURATION = 2
+FORWARD_DURATION = DURATION - REVERSE_DURATION
+CREDIT_START = FORWARD_DURATION - REVERSE_DURATION
+REVERSE_FRAME_COUNT = FPS * REVERSE_DURATION
 SIZE = 1080
 VIDEO_HEIGHT = 1920
 CAPTION = "How soon can you guess the album?"
@@ -82,39 +87,132 @@ def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
     return compose
 
 
-def create_credit_frame_transform(credit: str) -> Callable[[np.ndarray], np.ndarray]:
+def create_bottom_panel_frame_transform(
+    credit: str,
+) -> Callable[[np.ndarray, float], np.ndarray]:
     if len(credit.splitlines()) != 2:
         raise ValueError("Credit must contain exactly two lines")
+    font = ImageFont.truetype(str(font_path), size=84)
     credit_panel = render_text_panel(credit)
 
-    def compose(frame: np.ndarray) -> np.ndarray:
-        composed = frame.copy()
-        composed[1500:] = credit_panel
-        return composed
-
-    return compose
-
-
-def create_timer_frame_transform() -> Callable[[np.ndarray, float], np.ndarray]:
-    font = ImageFont.truetype(str(font_path), size=84)
-
     def compose(frame: np.ndarray, elapsed_seconds: float) -> np.ndarray:
-        if elapsed_seconds >= DURATION - 2:
-            return frame
-
-        panel = Image.new("RGB", (SIZE, 420), "black")
-        ImageDraw.Draw(panel).text(
-            (SIZE // 2, 210),
-            str(int(elapsed_seconds) + 1),
-            font=font,
-            fill=(72, 72, 72),
-            anchor="mm",
-        )
         composed = frame.copy()
-        composed[1500:] = np.asarray(panel)
+        if elapsed_seconds >= CREDIT_START:
+            composed[1500:] = credit_panel
+        else:
+            panel = Image.new("RGB", (SIZE, 420), "black")
+            ImageDraw.Draw(panel).text(
+                (SIZE // 2, 210),
+                str(int(elapsed_seconds) + 1),
+                font=font,
+                fill=(72, 72, 72),
+                anchor="mm",
+            )
+            composed[1500:] = np.asarray(panel)
         return composed
 
     return compose
+
+
+def create_reverse_tail_video(
+    forward_video_path: Path,
+    output_path: Path,
+    credit: str,
+) -> Path:
+    reverse_middle_path = output_path.with_name("reverse_middle.mp4")
+    forward_frame_count = FPS * FORWARD_DURATION
+    selected_frames = [
+        round(index * (forward_frame_count - 1) / (REVERSE_FRAME_COUNT - 1))
+        for index in range(REVERSE_FRAME_COUNT)
+    ]
+    select_expression = "+".join(f"eq(n,{index})" for index in selected_frames)
+    filter_graph = (
+        f"crop={SIZE}:{SIZE}:0:420,"
+        f"select='{select_expression}',reverse,setpts=N/({FPS}*TB)"
+    )
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(forward_video_path),
+            "-vf",
+            filter_graph,
+            "-an",
+            "-frames:v",
+            str(REVERSE_FRAME_COUNT),
+            "-c:v",
+            "libx264",
+            "-crf",
+            "18",
+            "-preset",
+            "faster",
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            str(FPS),
+            str(reverse_middle_path),
+        ],
+        check=True,
+    )
+
+    caption_panel = render_text_panel(CAPTION, wrap_width=18)
+    credit_panel = render_text_panel(credit).astype(np.float32)
+    frames_written = 0
+    writer_args = {
+        "format": "FFMPEG",
+        "mode": "I",
+        "fps": FPS,
+        "codec": "libx264",
+        "pixelformat": "yuv420p",
+        "macro_block_size": 1,
+        "ffmpeg_params": ["-crf", "18", "-preset", "faster", "-movflags", "+faststart"],
+    }
+    with (
+        imageio.get_reader(str(reverse_middle_path)) as reader,
+        imageio.get_writer(str(output_path), **writer_args) as writer,
+    ):
+        for index, middle_frame in enumerate(reader):
+            if index >= REVERSE_FRAME_COUNT:
+                raise RuntimeError("Reverse tail contains too many frames")
+            fade = 1 - index / (REVERSE_FRAME_COUNT - 1)
+            composed = np.zeros((VIDEO_HEIGHT, SIZE, 3), dtype=np.uint8)
+            composed[:420] = caption_panel
+            composed[420:1500] = middle_frame
+            composed[1500:] = (credit_panel * fade).astype(np.uint8)
+            writer.append_data(composed)
+            frames_written += 1
+
+    if frames_written != REVERSE_FRAME_COUNT:
+        raise RuntimeError(
+            f"Reverse tail has {frames_written} frames; expected {REVERSE_FRAME_COUNT}"
+        )
+    return output_path
+
+
+def create_loop_filter_complex() -> str:
+    reverse_speed = FORWARD_DURATION / REVERSE_DURATION
+    tempo_filters = []
+    while reverse_speed > 2:
+        tempo_filters.append("atempo=2")
+        reverse_speed /= 2
+    tempo_filters.append(f"atempo={reverse_speed:.9g}")
+    tempo_chain = ",".join(tempo_filters)
+
+    return (
+        "[0:v]setpts=PTS-STARTPTS[forward_video];"
+        "[1:v]setpts=PTS-STARTPTS[reverse_video];"
+        "[forward_video][reverse_video]concat=n=2:v=1:a=0[video];"
+        f"[2:a]atrim=duration={FORWARD_DURATION},asetpts=PTS-STARTPTS,"
+        "asplit=2[forward_audio][reverse_source];"
+        f"[reverse_source]areverse,{tempo_chain},"
+        f"apad=whole_dur={REVERSE_DURATION},"
+        f"atrim=duration={REVERSE_DURATION},asetpts=PTS-STARTPTS[reverse_audio];"
+        "[forward_audio][reverse_audio]concat=n=2:v=0:a=1[audio]"
+    )
 
 
 def create_album_video(
@@ -133,6 +231,7 @@ def create_album_video(
     with tempfile.TemporaryDirectory() as temporary_directory:
         audio_input_path = Path(temporary_directory) / "input.mp3"
         processed_audio_path = Path(temporary_directory) / "stretched.mp3"
+        reverse_video_path = Path(temporary_directory) / "reverse_tail.mp4"
         audio_input_path.write_bytes(audio_data)
         paulstretch_mp3(audio_input_path, processed_audio_path, factor=2.0)
 
@@ -142,9 +241,9 @@ def create_album_video(
                 input="<in-memory image>",
                 output=str(square_video),
                 fps=FPS,
-                max_frames=FPS * DURATION,
+                max_frames=FPS * FORWARD_DURATION,
                 start_hold=1.0,
-                end_hold=2.0,
+                end_hold=1 / FPS,
                 seed=seed,
                 crf=18,
                 preset="faster",
@@ -152,9 +251,9 @@ def create_album_video(
             ),
             image_data=image_data,
             frame_transform=create_caption_frame_transform(),
-            frame_time_transform=create_timer_frame_transform(),
-            final_frame_transform=create_credit_frame_transform(credit),
+            frame_time_transform=create_bottom_panel_frame_transform(credit),
         )
+        create_reverse_tail_video(square_video, reverse_video_path, credit)
 
         subprocess.run(
             [
@@ -166,13 +265,23 @@ def create_album_video(
                 "-i",
                 str(square_video),
                 "-i",
+                str(reverse_video_path),
+                "-i",
                 str(processed_audio_path),
+                "-filter_complex",
+                create_loop_filter_complex(),
                 "-map",
-                "0:v:0",
+                "[video]",
                 "-map",
-                "1:a:0",
+                "[audio]",
                 "-c:v",
-                "copy",
+                "libx264",
+                "-crf",
+                "18",
+                "-preset",
+                "faster",
+                "-pix_fmt",
+                "yuv420p",
                 "-c:a",
                 "aac",
                 "-b:a",
@@ -199,7 +308,7 @@ def parse_args() -> argparse.Namespace:
         nargs=2,
         required=True,
         metavar=("ARTIST_YEAR", "TITLE"),
-        help="two credit lines shown during the final two seconds",
+        help="two credit lines shown from second 56 and faded out at the end",
     )
     parser.add_argument(
         "-o",
