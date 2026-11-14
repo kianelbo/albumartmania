@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from collections.abc import Callable
 from io import BytesIO
@@ -14,6 +15,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 OUTPUT_SIZE = 1024
+logger = logging.getLogger(__name__)
 
 
 def _mean_color(integral: np.ndarray, region: tuple[int, int, int, int]) -> np.ndarray:
@@ -101,6 +103,7 @@ def render_animation(
     frame_transform: Callable[[np.ndarray], np.ndarray] | None = None,
     frame_time_transform: Callable[[np.ndarray, float], np.ndarray] | None = None,
     final_frame_transform: Callable[[np.ndarray], np.ndarray] | None = None,
+    show_progress: bool = False,
 ) -> Path:
     if isinstance(src_image, str):
         src_image = Path(src_image)
@@ -246,7 +249,7 @@ def render_animation(
 
                 completed_operations += 1
                 progress = completed_operations * 100 // total_operations
-                if progress > last_progress and progress < 100:
+                if show_progress and progress > last_progress and progress < 100:
                     print(
                         f"\rProgress: {progress:3d}%",
                         end="",
@@ -267,9 +270,12 @@ def render_animation(
     print("\rProgress: 100%", file=sys.stderr)
     duration = frames_written / fps
     input_label = "<in-memory image>" if isinstance(src_image, bytes) else src_image
-    print(f"Input:       {input_label}")
-    print(f"Image size:  {width}x{height}")
-    print(f"Snapshots:   {snapshots_written} (halfway at about 75% of clip duration)")
-    print(f"Frames:      {frames_written} ({duration:.2f}s at {fps} FPS)")
-    print(f"Output:      {output_path}")
+    logger.info("Input:       %s", input_label)
+    logger.info("Image size:  %dx%d", width, height)
+    logger.info(
+        "Snapshots:   %d (halfway at about 75%% of clip duration)",
+        snapshots_written,
+    )
+    logger.info("Frames:      %d (%.2fs at %d FPS)", frames_written, duration, fps)
+    logger.info("Output:      %s", output_path)
     return output_path

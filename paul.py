@@ -1,4 +1,5 @@
 
+import logging
 import math
 import subprocess
 import tempfile
@@ -10,6 +11,7 @@ from paulstretch import stretch
 
 SAMPLE_RATE = 44100
 CHANNELS = 2
+logger = logging.getLogger(__name__)
 
 
 def _decode_mp3(filename):
@@ -82,23 +84,23 @@ def paulstretch_mp3(
     if factor <= 1:
         raise ValueError("Stretch factor must be greater than 1.")
 
-    print("Decoding input audio...")
+    logger.info("Decoding input audio...")
     audio = _decode_mp3(input_file)
 
     original_frames = len(audio)
     expected_frames = round(original_frames * factor)
 
-    print(f"Original audio duration: {original_frames / SAMPLE_RATE:.1f}s")
-    print(f"Stretch factor: {factor}x")
-    print(f"Expected duration: {expected_frames / SAMPLE_RATE:.1f}s")
+    logger.info("Original audio duration: %.1fs", original_frames / SAMPLE_RATE)
+    logger.info("Stretch factor: %sx", factor)
+    logger.info("Expected duration: %.1fs", expected_frames / SAMPLE_RATE)
 
     # Convert window duration to a suitable FFT size.
     window_size = _nearest_power_of_two(
         max(2048, round(window_seconds * SAMPLE_RATE))
     )
 
-    print(f"FFT window size: {window_size}")
-    print("Applying PaulStretch...")
+    logger.info("FFT window size: %d", window_size)
+    logger.info("Applying PaulStretch...")
 
     # Reproducible random phase generation.
     np.random.seed(seed)
@@ -129,6 +131,6 @@ def paulstretch_mp3(
         exist_ok=True
     )
 
-    print("Encoding audio MP3...")
+    logger.info("Encoding audio MP3...")
     _encode_mp3(stretched, output_file, echo=echo)
-    print(f"Finished: {output_file}")
+    logger.info("Finished: %s", output_file)
