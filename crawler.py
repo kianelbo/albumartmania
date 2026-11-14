@@ -23,7 +23,12 @@ def _fix_lastfm_image_url(url: str):
     return re.sub(r'/(\d+s?|\d+x\d+)/', '/', url)
 
 
-def download_image(url, out_path="./img"):
+def _is_popular_enough(album: dict, min_listeners=10000):
+    # TODO
+    return True
+
+
+def download_file(url, out_path="./download"):
     resp = requests.get(url)
     resp.raise_for_status()
     ext = resp.headers.get("Content-Type", "").lower().split("/")[-1]
@@ -34,12 +39,13 @@ def download_image(url, out_path="./img"):
 
     return fname
 
-def get_random_album_cover(year=None):
+def get_random_album(year=None):
     if year is None:
         cur_year = datetime.now().year
         year = random.randint(1955, cur_year)
 
-    base_url = "http://ws.audioscrobbler.com/2.0/"
+    lastfm_base_url = "http://ws.audioscrobbler.com/2.0/"
+    deezer_base_url = "https://api.deezer.com/search"
     params = {
         "method": "tag.gettopalbums",
         "tag": str(year),
@@ -48,7 +54,7 @@ def get_random_album_cover(year=None):
         "page": 1
     }
 
-    response = requests.get(base_url, params=params)
+    response = requests.get(lastfm_base_url, params=params)
     response.raise_for_status()
     data = response.json().get("albums")
     total_pages = int(data["@attr"].get("totalPages", 1))
@@ -58,11 +64,14 @@ def get_random_album_cover(year=None):
         chosen_page = _get_random_page_index(total_pages)
 
         params["page"] = chosen_page
-        response = requests.get(base_url, params=params)
+        response = requests.get(lastfm_base_url, params=params)
         response.raise_for_status()
         albums_list = response.json().get("albums").get("album", [])
 
         album = random.choice(albums_list)
+        if not _is_popular_enough(album):
+            continue
+
         artist = album["artist"]["name"]
         title = album["name"]
         image_list = album.get("image", [])
@@ -72,12 +81,21 @@ def get_random_album_cover(year=None):
                 cover_url = _fix_lastfm_image_url(url)
                 break
 
-    out_path = download_image(cover_url)
+        if cover_url:
+            cover_path = download_file(cover_url)
+
+            # Get a preview track from Deezer
+            response = requests.get(deezer_base_url, params={"q": f"{artist} {title}"})
+            response.raise_for_status()
+            deezer_data = response.json()["data"]
+            preview_track = deezer_data[0]["preview"]
+            preview_track_path = download_file(preview_track)
+            break
 
     return {
         "year": year,
         "artist": artist,
-        "album": title,
-        "url": cover_url,
-        "downloaded_path": out_path
+        "title": title,
+        "cover_path": cover_path,
+        "preview_track_path": preview_track_path,
     }
