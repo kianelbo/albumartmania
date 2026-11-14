@@ -25,7 +25,7 @@ def _fix_lastfm_image_url(url: str):
     return re.sub(r'/(\d+s?|\d+x\d+)/', '/', url)
 
 
-def _is_popular_enough(album: dict, min_listeners=16000):
+def _is_popular_enough(album: dict, min_listeners=500000):
     params = {
         "api_key": LAST_FM_API_KEY,
         "format": "json",
