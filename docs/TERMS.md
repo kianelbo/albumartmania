@@ -20,7 +20,7 @@ The source code is publicly available for transparency, inspection, educational 
 
 Public availability does not grant permission to copy, reproduce, modify, distribute, incorporate, or commercially or non-commercially exploit the Software.
 
-All rights are reserved except for the limited permissions expressly granted in the repository's [LICENSE](https://github.com/kianelbo/inner-sleeves/blob/main/LICENSE).
+All rights are reserved except for the limited permissions expressly granted in the repository's [LICENSE](https://github.com/kianelbo/inner-sleeves/blob/main/LICENSE.md).
 
 Users of GitHub retain the rights granted to them under GitHub's Terms of Service, including the ability to view and fork public repositories within GitHub.
 
