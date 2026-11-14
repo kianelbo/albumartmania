@@ -256,7 +256,7 @@ def save_random_thumbnail(
     return thumbnail_path, timestamp
 
 
-def create_album_video(
+def create_short_video(
     image_data: bytes,
     audio_data: bytes,
     output_path: Path,
@@ -336,10 +336,6 @@ def create_album_video(
             check=True,
         )
 
-        thumbnail_path, thumbnail_time = save_random_thumbnail(output_path, seed=seed)
-
-    print(f"Created {output_path}")
-    print(f"Created thumbnail {thumbnail_path} from {thumbnail_time:.2f}s")
     return output_path
 
 
@@ -378,7 +374,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        create_album_video(
+        create_short_video(
             args.image.read_bytes(),
             args.audio.read_bytes(),
             args.output,

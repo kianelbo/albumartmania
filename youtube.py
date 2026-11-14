@@ -26,16 +26,14 @@ class YouTubeClient:
     def _get_youtube_service(self):
         """Create an authenticated YouTube API client."""
 
-        # required_vars = [
-        #     "YOUTUBE_CLIENT_ID",
-        #     "YOUTUBE_CLIENT_SECRET",
-        #     "YOUTUBE_REFRESH_TOKEN",
-        # ]
-        # missing = [name for name in required_vars if not os.getenv(name)]
-        # if missing:
-        #     raise RuntimeError(
-        #         f"Missing environment variables: {', '.join(missing)}"
-        #     )
+        required_vars = [
+            "YOUTUBE_CLIENT_ID",
+            "YOUTUBE_CLIENT_SECRET",
+            "YOUTUBE_REFRESH_TOKEN",
+        ]
+        missing = [name for name in required_vars if not os.getenv(name)]
+        if missing:
+            raise RuntimeError(f"Missing environment variables: {', '.join(missing)}")
 
         credentials = Credentials(
             token=None,
@@ -62,7 +60,7 @@ class YouTubeClient:
         title: str | None = None,
         description: str = "",
         tags: list[str] | None = None,
-        privacy_status: str = "private",
+        privacy_status: str = "public",
     ) -> str:
         """Upload a video and return its YouTube video ID."""
 

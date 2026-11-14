@@ -1,52 +1,36 @@
-import json
-import os
-import redis
+from pathlib import Path
+from time import sleep
 
-from crawler import download_image, get_random_album_cover
-from image import crop_image
-from twitter import TwitterClient
-
-
-REDIS_URL = os.getenv("REDIS_URL")
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-redis_key = "last_album"
+from crawler import get_random_album
+from video_gen import create_short_video, save_random_thumbnail
+from youtube import YouTubeClient
 
 
 if __name__ == "__main__":
-    r = redis.Redis(
-        host=REDIS_URL,
-        port=13261,
-        decode_responses=True,
-        username="default",
-        password=REDIS_PASSWORD,
+    print("Fetching a random album...")
+    album = get_random_album()
+    print("Album fetched!")
+
+    output_path = Path("reveal.mp4")
+    output_path =create_short_video(
+        Path(album["cover_path"]).read_bytes(),
+        Path(album["preview_track_path"]).read_bytes(),
+        output_path,
+        credit=f"{album['artist']}, {album['year']}\n{album['title']}",
     )
+    print(f"Created {output_path}")
 
-    twitter_client = TwitterClient()
+    client = YouTubeClient()
+    tags = ["album art", "ambient", "music"]
+    tags.append(album["artist"])
+    tags.append(album["title"])
 
-    saved = r.get(redis_key)
+    print(f"Uploading {output_path.name}...")
+    video_id = client.upload_short(output_path, "Guess the album! #music #albumart", tags=tags)
+    print(f"Uploaded successfully: https://www.youtube.com/watch?v={video_id}")
 
-    if not saved:
-        print("Fetching and posting the teaser...")
-
-        album = get_random_album_cover()
-
-        cropped_image = crop_image(album["downloaded_path"])
-
-        tweet_id = twitter_client.post(cropped_image, "Guess the album 🎵")
-        album["tweet_id"] = tweet_id
-
-        r.set(redis_key, json.dumps(album))
-
-    else:
-        print("Fetching and posting the full image...")
-
-        album = json.loads(saved)
-        tweet_id = album["tweet_id"]
-
-        twitter_client.delete(tweet_id)
-
-        img_path = download_image(album["url"])
-        text = f"{album['artist']} — {album['album']} ({album['year']})"
-        twitter_client.post(img_path, text)
-
-        r.delete(redis_key)
+    sleep(5 * 60)  # Wait a moment before setting the thumbnail
+    thumbnail_path, thumbnail_time = save_random_thumbnail(output_path)
+    print(f"Created thumbnail {thumbnail_path} from {thumbnail_time:.2f}s")
+    client.set_thumbnail(video_id, thumbnail_path)
+    print("Custom thumbnail uploaded successfully!")

@@ -28,7 +28,7 @@ def _is_popular_enough(album: dict, min_listeners=10000):
     return True
 
 
-def download_file(url, out_path="./"):
+def download_file(url, out_path="./download"):
     resp = requests.get(url)
     resp.raise_for_status()
     ext = resp.headers.get("Content-Type", "").lower().split("/")[-1]
@@ -95,7 +95,7 @@ def get_random_album(year=None):
     return {
         "year": year,
         "artist": artist,
-        "album": title,
+        "title": title,
         "cover_path": cover_path,
         "preview_track_path": preview_track_path,
     }
