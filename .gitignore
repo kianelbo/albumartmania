@@ -15,6 +15,8 @@ secret.json
 *.mp3
 *.mp4
 
+!assets/logo.jpg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
