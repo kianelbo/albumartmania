@@ -13,6 +13,7 @@ secret.json
 *.jpg
 *.jpeg
 *.mp3
+*.mpeg
 *.mp4
 
 !assets/logo.jpg

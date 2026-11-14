@@ -6,6 +6,8 @@ import requests
 from datetime import datetime
 
 LAST_FM_API_KEY = os.getenv("LAST_FM_API_KEY")
+lastfm_base_url = "http://ws.audioscrobbler.com/2.0/"
+deezer_base_url = "https://api.deezer.com/search"
 
 
 def _get_random_page_index(total_pages, lam=0.3):
@@ -23,9 +25,19 @@ def _fix_lastfm_image_url(url: str):
     return re.sub(r'/(\d+s?|\d+x\d+)/', '/', url)
 
 
-def _is_popular_enough(album: dict, min_listeners=10000):
-    # TODO
-    return True
+def _is_popular_enough(album: dict, min_listeners=16000):
+    params = {
+        "api_key": LAST_FM_API_KEY,
+        "format": "json",
+        "method": "album.getinfo",
+        "artist": album["artist"]["name"],
+        "album": album["name"],
+    }
+
+    response = requests.get(lastfm_base_url, params=params)
+    response.raise_for_status()
+    listeners_count = int(response.json()["album"].get("listeners", 0))
+    return listeners_count >= min_listeners
 
 
 def download_file(url, out_path="./download"):
@@ -44,8 +56,6 @@ def get_random_album(year=None):
         cur_year = datetime.now().year
         year = random.randint(1955, cur_year)
 
-    lastfm_base_url = "http://ws.audioscrobbler.com/2.0/"
-    deezer_base_url = "https://api.deezer.com/search"
     params = {
         "method": "tag.gettopalbums",
         "tag": str(year),
