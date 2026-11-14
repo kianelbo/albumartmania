@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """Create a 60-second vertical album-reveal video with PaulStretch audio.
-
-Example:
-    python video_gen.py cover.jpg song.mp3 --credit "Artist, year" "Title
-
 A random frame from 17-31 seconds is saved beside the video as *_thumbnail.jpg.
 """
 
 from __future__ import annotations
 
-import argparse
 import subprocess
-import sys
 import tempfile
 import textwrap
 from collections.abc import Callable
@@ -30,15 +24,14 @@ REVERSE_DURATION = 2
 FORWARD_DURATION = DURATION - REVERSE_DURATION
 CREDIT_START = FORWARD_DURATION - REVERSE_DURATION
 REVERSE_FRAME_COUNT = FPS * REVERSE_DURATION
-THUMBNAIL_START_SECOND = 17
-THUMBNAIL_END_SECOND = 31
+THUMBNAIL_INTERVAL = (17, 31)
 SIZE = 1080
 VIDEO_HEIGHT = 1920
 CAPTION = "How soon can you guess the album?"
 font_path = Path(__file__).resolve().parent / "assets" / "OLDSH___.ttf"
 
 
-def render_text_panel(text: str, *, wrap_width: int | None = None) -> np.ndarray:
+def _render_text_panel(text: str, *, wrap_width: int | None = None) -> np.ndarray:
     if wrap_width is not None:
         text = textwrap.fill(text, width=wrap_width)
     lines = text.splitlines()
@@ -79,8 +72,8 @@ def render_text_panel(text: str, *, wrap_width: int | None = None) -> np.ndarray
     return np.asarray(banner.convert("RGB"))
 
 
-def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
-    header = render_text_panel(CAPTION, wrap_width=18)
+def _create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
+    header = _render_text_panel(CAPTION, wrap_width=18)
 
     def compose(frame: np.ndarray) -> np.ndarray:
         composed = np.zeros((VIDEO_HEIGHT, SIZE, 3), dtype=np.uint8)
@@ -91,13 +84,11 @@ def create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
     return compose
 
 
-def create_bottom_panel_frame_transform(
-    credit: str,
-) -> Callable[[np.ndarray, float], np.ndarray]:
+def _create_credit_frame_transform(credit: str) -> Callable[[np.ndarray, float], np.ndarray]:
     if len(credit.splitlines()) != 2:
         raise ValueError("Credit must contain exactly two lines")
     font = ImageFont.truetype(str(font_path), size=84)
-    credit_panel = render_text_panel(credit)
+    credit_panel = _render_text_panel(credit)
 
     def compose(frame: np.ndarray, elapsed_seconds: float) -> np.ndarray:
         composed = frame.copy()
@@ -118,7 +109,7 @@ def create_bottom_panel_frame_transform(
     return compose
 
 
-def create_reverse_tail_video(
+def _create_reverse_tail_video(
     forward_video_path: Path,
     output_path: Path,
     credit: str,
@@ -163,8 +154,8 @@ def create_reverse_tail_video(
         check=True,
     )
 
-    caption_panel = render_text_panel(CAPTION, wrap_width=18)
-    credit_panel = render_text_panel(credit).astype(np.float32)
+    caption_panel = _render_text_panel(CAPTION, wrap_width=18)
+    credit_panel = _render_text_panel(credit).astype(np.float32)
     frames_written = 0
     writer_args = {
         "format": "FFMPEG",
@@ -197,7 +188,7 @@ def create_reverse_tail_video(
     return output_path
 
 
-def create_loop_filter_complex() -> str:
+def _create_loop_filter_complex() -> str:
     reverse_speed = FORWARD_DURATION / REVERSE_DURATION
     tempo_filters = []
     while reverse_speed > 2:
@@ -226,8 +217,8 @@ def save_random_thumbnail(
 ) -> tuple[Path, float]:
     frame_index = int(
         np.random.default_rng(seed).integers(
-            THUMBNAIL_START_SECOND * FPS,
-            THUMBNAIL_END_SECOND * FPS + 1,
+            THUMBNAIL_INTERVAL[0] * FPS,
+            THUMBNAIL_INTERVAL[1] * FPS + 1,
         )
     )
     timestamp = frame_index / FPS
@@ -260,12 +251,9 @@ def create_short_video(
     image_data: bytes,
     audio_data: bytes,
     output_path: Path,
-    *,
     credit: str,
     seed: int | None = None,
 ) -> Path:
-    if len(credit.splitlines()) != 2:
-        raise ValueError("Credit must contain exactly two lines")
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -278,23 +266,20 @@ def create_short_video(
 
         square_video = Path(temporary_directory) / "reveal.mp4"
         render_animation(
-            argparse.Namespace(
-                input="<in-memory image>",
-                output=str(square_video),
-                fps=FPS,
-                max_frames=FPS * FORWARD_DURATION,
-                start_hold=1.0,
-                end_hold=1 / FPS,
-                seed=seed,
-                crf=18,
-                preset="faster",
-                size=SIZE,
-            ),
-            image_data=image_data,
-            frame_transform=create_caption_frame_transform(),
-            frame_time_transform=create_bottom_panel_frame_transform(credit),
+            src_image=image_data,
+            output_path=square_video,
+            fps=FPS,
+            max_frames=FPS * FORWARD_DURATION,
+            start_hold=1.0,
+            end_hold=1 / FPS,
+            seed=seed,
+            crf=18,
+            preset="faster",
+            size=SIZE,
+            frame_transform=_create_caption_frame_transform(),
+            frame_time_transform=_create_credit_frame_transform(credit),
         )
-        create_reverse_tail_video(square_video, reverse_video_path, credit)
+        _create_reverse_tail_video(square_video, reverse_video_path, credit)
 
         subprocess.run(
             [
@@ -310,7 +295,7 @@ def create_short_video(
                 "-i",
                 str(processed_audio_path),
                 "-filter_complex",
-                create_loop_filter_complex(),
+                _create_loop_filter_complex(),
                 "-map",
                 "[video]",
                 "-map",
@@ -337,55 +322,3 @@ def create_short_video(
         )
 
     return output_path
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("image", type=Path, help="Album-cover image")
-    parser.add_argument("audio", type=Path, help="Song MP3")
-    parser.add_argument(
-        "--credit",
-        nargs=2,
-        required=True,
-        metavar=("ARTIST_YEAR", "TITLE"),
-        help="two credit lines shown from second 56 and faded out at the end",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        default=Path("album_reveal.mp4"),
-        help="Output MP4 path (default: album_reveal.mp4)",
-    )
-    parser.add_argument("--seed", type=int, help="Random seed for repeatable reveals")
-    args = parser.parse_args()
-
-    thumbnail_path = args.output.with_name(f"{args.output.stem}_thumbnail.jpg")
-    for input_path in (args.image, args.audio):
-        if not input_path.is_file():
-            parser.error(f"input file does not exist: {input_path}")
-        if input_path.resolve() == args.output.resolve():
-            parser.error(f"output must differ from input: {input_path}")
-        if input_path.resolve() == thumbnail_path.resolve():
-            parser.error(f"thumbnail output must differ from input: {input_path}")
-    return args
-
-
-def main() -> int:
-    args = parse_args()
-    try:
-        create_short_video(
-            args.image.read_bytes(),
-            args.audio.read_bytes(),
-            args.output,
-            credit="\n".join(args.credit),
-            seed=args.seed,
-        )
-    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

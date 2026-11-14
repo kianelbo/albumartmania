@@ -1,5 +1,4 @@
 
-import argparse
 import math
 import subprocess
 import tempfile
@@ -13,7 +12,7 @@ SAMPLE_RATE = 44100
 CHANNELS = 2
 
 
-def decode_mp3(filename):
+def _decode_mp3(filename):
     """Decode an MP3 into stereo float32 samples using FFmpeg."""
     command = [
         "ffmpeg", "-v", "error",
@@ -24,14 +23,12 @@ def decode_mp3(filename):
         "-ac", str(CHANNELS),
         "pipe:1"
     ]
-
     result = subprocess.run(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=True
     )
-
     audio = np.frombuffer(result.stdout, dtype="<f4")
 
     if audio.size == 0 or audio.size % CHANNELS:
@@ -40,11 +37,11 @@ def decode_mp3(filename):
     return audio.reshape(-1, CHANNELS).copy()
 
 
-def nearest_power_of_two(value):
+def _nearest_power_of_two(value):
     return 1 << round(math.log2(value))
 
 
-def encode_mp3(audio, filename, echo=False):
+def _encode_mp3(audio, filename, echo=False):
     """Encode float32 stereo audio into a high-quality MP3."""
     with tempfile.TemporaryDirectory() as temp_dir:
         raw_file = Path(temp_dir) / "audio.raw"
@@ -85,18 +82,18 @@ def paulstretch_mp3(
     if factor <= 1:
         raise ValueError("Stretch factor must be greater than 1.")
 
-    print("Decoding input...")
-    audio = decode_mp3(input_file)
+    print("Decoding input audio...")
+    audio = _decode_mp3(input_file)
 
     original_frames = len(audio)
     expected_frames = round(original_frames * factor)
 
-    print(f"Original duration: {original_frames / SAMPLE_RATE:.1f}s")
+    print(f"Original audio duration: {original_frames / SAMPLE_RATE:.1f}s")
     print(f"Stretch factor: {factor}x")
     print(f"Expected duration: {expected_frames / SAMPLE_RATE:.1f}s")
 
     # Convert window duration to a suitable FFT size.
-    window_size = nearest_power_of_two(
+    window_size = _nearest_power_of_two(
         max(2048, round(window_seconds * SAMPLE_RATE))
     )
 
@@ -132,53 +129,6 @@ def paulstretch_mp3(
         exist_ok=True
     )
 
-    print("Encoding MP3...")
-    encode_mp3(stretched, output_file, echo=echo)
-
+    print("Encoding audio MP3...")
+    _encode_mp3(stretched, output_file, echo=echo)
     print(f"Finished: {output_file}")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Create ambient music using PaulStretch."
-    )
-
-    parser.add_argument("input")
-    parser.add_argument("output")
-
-    parser.add_argument(
-        "--factor",
-        type=float,
-        default=8.0,
-        help="Stretch factor (default: 8)"
-    )
-
-    parser.add_argument(
-        "--window",
-        type=float,
-        default=0.75,
-        help="FFT window duration in seconds (default: 0.75)"
-    )
-
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42
-    )
-
-    parser.add_argument(
-        "--echo",
-        action="store_true",
-        help="Add a subtle multi-tap echo after stretching"
-    )
-
-    args = parser.parse_args()
-
-    paulstretch_mp3(
-        args.input,
-        args.output,
-        factor=args.factor,
-        window_seconds=args.window,
-        seed=args.seed,
-        echo=args.echo
-    )

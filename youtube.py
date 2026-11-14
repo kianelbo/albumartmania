@@ -13,9 +13,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
-
 TOKEN_URI = "https://oauth2.googleapis.com/token"
-
 CATEGORY = "10" # Music
 
 
@@ -43,7 +41,6 @@ class YouTubeClient:
             client_secret=os.environ["YOUTUBE_CLIENT_SECRET"],
             scopes=SCOPES,
         )
-
         # Exchange the refresh token for a fresh access token.
         credentials.refresh(Request())
 
@@ -82,12 +79,10 @@ class YouTubeClient:
                 "privacyStatus": privacy_status,
             },
         }
-
         if tags:
             body["snippet"]["tags"] = tags
 
         mime_type = mimetypes.guess_type(path.name)[0] or "video/mp4"
-
         media = MediaFileUpload(
             str(path),
             mimetype=mime_type,
@@ -130,19 +125,3 @@ class YouTubeClient:
                 mimetype=thumbnail_mime,
             ),
         ).execute()
-
-
-if __name__ == "__main__":
-    client = YouTubeClient()
-
-    file_path = Path("final3.mp4")
-    tags = ["album art", "ambient", "music"]
-    tags.append("The Beatles")
-    tags.append("Sgt. Pepper's Lonely Hearts Club Band")
-
-    print(f"Uploading {file_path.name}...")
-    video_id = client.upload_short(file_path, "Guess the album! #music #albumart", tags=tags)
-    print(f"Uploaded successfully: https://www.youtube.com/watch?v={video_id}")
-
-    # client.set_thumbnail(video_id, "final_thumbnail.jpg")
-    # print("Custom thumbnail uploaded successfully!")

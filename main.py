@@ -29,7 +29,7 @@ if __name__ == "__main__":
     video_id = client.upload_short(output_path, "Guess the album! #music #albumart", tags=tags)
     print(f"Uploaded successfully: https://www.youtube.com/watch?v={video_id}")
 
-    sleep(5 * 60)  # Wait a moment before setting the thumbnail
+    sleep(5 * 60)  # Wait before setting the thumbnail
     thumbnail_path, thumbnail_time = save_random_thumbnail(output_path)
     print(f"Created thumbnail {thumbnail_path} from {thumbnail_time:.2f}s")
     client.set_thumbnail(video_id, thumbnail_path)
