@@ -104,6 +104,8 @@ def get_random_album(year=None):
             preview_track = deezer_data[0]["preview"]
             preview_track_path = download_file(preview_track)
 
+    title = re.sub(r"\s*\((?:\d{4}\s+)?remaster(?:ed)?\)$", "", title, flags=re.IGNORECASE)
+
     return {
         "year": year,
         "artist": artist,
