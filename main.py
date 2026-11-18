@@ -30,7 +30,12 @@ if __name__ == "__main__":
     tags.append(album["title"])
 
     logger.info("Uploading %s...", output_path.name)
-    video_id = client.upload_short(output_path, "Guess the album! #music #albumart", tags=tags)
+    video_id = client.upload_short(
+        output_path,
+        "Guess the album! #music #albumart",
+        "Test your music knowledge by guessing the album and the song! Subscribe for more daily challenges.",
+        tags,
+    )
     logger.info("Uploaded successfully: https://www.youtube.com/watch?v=%s", video_id)
 
     sleep(5 * 60)  # Wait before setting the thumbnail
