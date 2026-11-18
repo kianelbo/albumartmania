@@ -19,10 +19,11 @@ def _get_random_page_index(total_pages, lam=0.3):
 
 
 def _fix_lastfm_image_url(url: str):
+    url = url.replace("lastfm-img.freetls.fastly.net", "lastfm.freetls.fastly.net")
     # Remove size segment from Last.fm image URLs, e.g.:
     # https://.../i/u/174s/xxxxx.png    -> https://.../i/u/xxxxx.png
     # https://.../i/u/300x300/xxxxx.png -> https://.../i/u/xxxxx.png
-    return re.sub(r'/(\d+s?|\d+x\d+)/', '/', url)
+    return re.sub(r"/(\d+s?|\d+x\d+)/", "/", url)
 
 
 def _is_popular_enough(album: dict, min_listeners=500000):
