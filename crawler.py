@@ -56,7 +56,9 @@ def download_file(url, out_path="./download"):
 def get_random_album(year=None):
     if year is None:
         cur_year = datetime.now().year
-        year = random.randint(1955, cur_year)
+        years = range(1955, cur_year)
+        weights = [1.2 if 1966 <= candidate <= 1995 else 1 for candidate in years]
+        year = random.choices(years, weights=weights, k=1)[0]
 
     params = {
         "method": "tag.gettopalbums",
