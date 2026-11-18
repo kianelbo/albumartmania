@@ -8,6 +8,15 @@ from youtube import YouTubeClient
 
 logger = logging.getLogger(__name__)
 
+
+def _get_caption(listeners_count):
+    if listeners_count > 2_000_000:
+        return "Can you recognize\nthis iconic album?"
+    elif listeners_count < 1_000_000:
+        return "Only real music nerds\nknow this album"
+    return "How soon can you\nguess the album?"
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -16,10 +25,11 @@ if __name__ == "__main__":
     logger.info("Album fetched!")
 
     output_path = Path("reveal.mp4")
-    output_path =create_short_video(
+    output_path = create_short_video(
         Path(album["cover_path"]).read_bytes(),
         Path(album["preview_track_path"]).read_bytes(),
         output_path,
+        caption=_get_caption(album["listeners_count"]),
         credit=f"{album['artist']}, {album['year']}\n{album['title']}",
     )
     logger.info("Created %s", output_path)

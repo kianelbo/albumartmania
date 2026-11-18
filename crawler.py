@@ -6,11 +6,12 @@ import requests
 from datetime import datetime
 
 LAST_FM_API_KEY = os.getenv("LAST_FM_API_KEY")
-lastfm_base_url = "http://ws.audioscrobbler.com/2.0/"
-deezer_base_url = "https://api.deezer.com/search"
+LASTFM_BASE_URL = "http://ws.audioscrobbler.com/2.0/"
+DEEZER_BASE_URL = "https://api.deezer.com/search/"
+MIN_LISTENERS = 500_000
 
 
-def _get_random_page_index(total_pages, lam=0.3):
+def _get_random_page_index(total_pages, lam=0.5):
     # Lower pages are more likely: p(page) ∝ e^{-λ*(page-1)}, λ controls bias
     probs = [math.exp(-lam * (p - 1)) for p in range(1, total_pages + 1)]
     total = sum(probs)
@@ -26,7 +27,7 @@ def _fix_lastfm_image_url(url: str):
     return re.sub(r"/(\d+s?|\d+x\d+)/", "/", url)
 
 
-def _is_popular_enough(album: dict, min_listeners=500000):
+def _get_listeners_count(album: dict):
     params = {
         "api_key": LAST_FM_API_KEY,
         "format": "json",
@@ -35,10 +36,10 @@ def _is_popular_enough(album: dict, min_listeners=500000):
         "album": album["name"],
     }
 
-    response = requests.get(lastfm_base_url, params=params)
+    response = requests.get(LASTFM_BASE_URL, params=params)
     response.raise_for_status()
     listeners_count = int(response.json()["album"].get("listeners", 0))
-    return listeners_count >= min_listeners
+    return listeners_count
 
 
 def download_file(url, out_path="./download"):
@@ -65,7 +66,7 @@ def get_random_album(year=None):
         "page": 1
     }
 
-    response = requests.get(lastfm_base_url, params=params)
+    response = requests.get(LASTFM_BASE_URL, params=params)
     response.raise_for_status()
     data = response.json().get("albums")
     total_pages = int(data["@attr"].get("totalPages", 1))
@@ -75,12 +76,13 @@ def get_random_album(year=None):
         chosen_page = _get_random_page_index(total_pages)
 
         params["page"] = chosen_page
-        response = requests.get(lastfm_base_url, params=params)
+        response = requests.get(LASTFM_BASE_URL, params=params)
         response.raise_for_status()
         albums_list = response.json().get("albums").get("album", [])
 
         album = random.choice(albums_list)
-        if not _is_popular_enough(album):
+        listeners_count = _get_listeners_count(album)
+        if listeners_count <= MIN_LISTENERS:    # is popular enough?
             continue
 
         artist = album["artist"]["name"]
@@ -96,17 +98,17 @@ def get_random_album(year=None):
             cover_path = download_file(cover_url)
 
             # Get a preview track from Deezer
-            response = requests.get(deezer_base_url, params={"q": f"{artist} {title}"})
+            response = requests.get(DEEZER_BASE_URL, params={"q": f"{artist} {title}"})
             response.raise_for_status()
             deezer_data = response.json()["data"]
             preview_track = deezer_data[0]["preview"]
             preview_track_path = download_file(preview_track)
-            break
 
     return {
         "year": year,
         "artist": artist,
         "title": title,
+        "listeners_count": listeners_count,
         "cover_path": cover_path,
         "preview_track_path": preview_track_path,
     }

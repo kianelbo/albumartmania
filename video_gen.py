@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
-import textwrap
 from collections.abc import Callable
 from pathlib import Path
 
@@ -27,13 +26,10 @@ REVERSE_FRAME_COUNT = FPS * REVERSE_DURATION
 THUMBNAIL_INTERVAL = (17, 31)
 SIZE = 1080
 VIDEO_HEIGHT = 1920
-CAPTION = "How soon can you guess the album?"
 font_path = Path(__file__).resolve().parent / "assets" / "OLDSH___.ttf"
 
 
-def _render_text_panel(text: str, *, wrap_width: int | None = None) -> np.ndarray:
-    if wrap_width is not None:
-        text = textwrap.fill(text, width=wrap_width)
+def _render_text_panel(text: str) -> np.ndarray:
     lines = text.splitlines()
     stroke_width = 2
     font = None
@@ -72,8 +68,8 @@ def _render_text_panel(text: str, *, wrap_width: int | None = None) -> np.ndarra
     return np.asarray(banner.convert("RGB"))
 
 
-def _create_caption_frame_transform() -> Callable[[np.ndarray], np.ndarray]:
-    header = _render_text_panel(CAPTION, wrap_width=18)
+def _create_caption_frame_transform(caption: str) -> Callable[[np.ndarray], np.ndarray]:
+    header = _render_text_panel(caption)
 
     def compose(frame: np.ndarray) -> np.ndarray:
         composed = np.zeros((VIDEO_HEIGHT, SIZE, 3), dtype=np.uint8)
@@ -112,6 +108,7 @@ def _create_credit_frame_transform(credit: str) -> Callable[[np.ndarray, float],
 def _create_reverse_tail_video(
     forward_video_path: Path,
     output_path: Path,
+    caption: str,
     credit: str,
 ) -> Path:
     reverse_middle_path = output_path.with_name("reverse_middle.mp4")
@@ -154,7 +151,7 @@ def _create_reverse_tail_video(
         check=True,
     )
 
-    caption_panel = _render_text_panel(CAPTION, wrap_width=18)
+    caption_panel = _render_text_panel(caption)
     credit_panel = _render_text_panel(credit).astype(np.float32)
     frames_written = 0
     writer_args = {
@@ -251,6 +248,7 @@ def create_short_video(
     image_data: bytes,
     audio_data: bytes,
     output_path: Path,
+    caption: str,
     credit: str,
     seed: int | None = None,
 ) -> Path:
@@ -276,10 +274,10 @@ def create_short_video(
             crf=18,
             preset="faster",
             size=SIZE,
-            frame_transform=_create_caption_frame_transform(),
+            frame_transform=_create_caption_frame_transform(caption),
             frame_time_transform=_create_credit_frame_transform(credit),
         )
-        _create_reverse_tail_video(square_video, reverse_video_path, credit)
+        _create_reverse_tail_video(square_video, reverse_video_path, caption, credit)
 
         subprocess.run(
             [
